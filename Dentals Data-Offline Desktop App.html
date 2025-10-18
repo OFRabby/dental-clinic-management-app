@@ -1,0 +1,1988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dentals Data - Offline App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hover-lift {
+            transition: all 0.3s ease;
+        }
+        
+        .hover-lift:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .card-glow {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .scrollbar-thin {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #1f2937;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #1f2937;
+            border-radius: 10px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 10px;
+        }
+
+        .container-standard {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .popup-content {
+            background: #1f2937;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            color: white;
+        }
+
+        .warning-popup {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        /* Download button styles */
+        .download-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .download-btn:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+    </style>
+</head>
+<body class="dark-mode" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #f1f5f9; min-height: 100vh;">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Types
+        const DiscountType = {
+            Fixed: 'fixed',
+            Percentage: 'percentage'
+        };
+
+        // Constants
+        const INITIAL_SERVICES = [
+            { id: 's1', name: 'Dental Check-up', price: 500, icon: '🦷' },
+            { id: 's2', name: 'Tooth Filling', price: 1500, icon: '🔧' },
+            { id: 's3', name: 'Digital X-Ray', price: 800, icon: '📷' },
+            { id: 's4', name: 'Teeth Scaling', price: 2000, icon: '✨' },
+            { id: 's5', name: 'Tooth Extraction', price: 1000, icon: '🦴' },
+            { id: 's6', name: 'Root Canal', price: 5000, icon: '🧪' },
+            { id: 's7', name: 'Dental Crown', price: 4000, icon: '👑' },
+            { id: 's8', name: 'Teeth Whitening', price: 3000, icon: '💎' },
+        ];
+
+        const INITIAL_DOCTORS = [
+            { id: 'd1', name: 'Dr. Sarah Rahman', specialty: 'Orthodontist', experience: '10 years', icon: '👩‍⚕️' },
+            { id: 'd2', name: 'Dr. Ahmed Tasnim', specialty: 'Endodontist', experience: '8 years', icon: '👨‍⚕️' },
+            { id: 'd3', name: 'Dr. Maria Khan', specialty: 'Pediatric Dentist', experience: '12 years', icon: '🧑‍⚕️' },
+        ];
+
+        // Browser Storage System with Downloadable App Feature
+        class BrowserStorageSystem {
+            constructor() {
+                this.dbName = 'DentalClinicApp';
+                this.version = 4;
+                this.db = null;
+                this.storageLimit = this.getBrowserStorageLimit();
+            }
+
+            getBrowserStorageLimit() {
+                // Different browsers have different storage limits
+                const userAgent = navigator.userAgent.toLowerCase();
+                
+                if (userAgent.includes('chrome')) {
+                    return '10GB+ (Chrome)';
+                } else if (userAgent.includes('firefox')) {
+                    return '10GB+ (Firefox)';
+                } else if (userAgent.includes('safari')) {
+                    return '5GB+ (Safari)';
+                } else if (userAgent.includes('edge')) {
+                    return '10GB+ (Edge)';
+                } else {
+                    return '5GB+ (Your Browser)';
+                }
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(this.dbName, this.version);
+
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        this.db = request.result;
+                        resolve(this.db);
+                    };
+
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+
+                        // Patients store
+                        if (!db.objectStoreNames.contains('patients')) {
+                            const patientStore = db.createObjectStore('patients', { 
+                                keyPath: 'id'
+                            });
+                            patientStore.createIndex('date', 'date', { unique: false });
+                            patientStore.createIndex('patientId', 'patientId', { unique: false });
+                            patientStore.createIndex('year', 'year', { unique: false });
+                        }
+
+                        // Services store
+                        if (!db.objectStoreNames.contains('services')) {
+                            db.createObjectStore('services', { keyPath: 'id' });
+                        }
+
+                        // Doctors store
+                        if (!db.objectStoreNames.contains('doctors')) {
+                            db.createObjectStore('doctors', { keyPath: 'id' });
+                        }
+
+                        // App settings store
+                        if (!db.objectStoreNames.contains('settings')) {
+                            db.createObjectStore('settings', { keyPath: 'id' });
+                        }
+                    };
+                });
+            }
+
+            async savePatient(patient) {
+                const year = new Date(patient.date).getFullYear();
+                patient.year = year;
+
+                const transaction = this.db.transaction(['patients'], 'readwrite');
+                const store = transaction.objectStore('patients');
+                await store.add(patient);
+
+                // Update app statistics
+                await this.updateAppStats();
+            }
+
+            async getAllPatients() {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['patients'], 'readonly');
+                    const store = transaction.objectStore('patients');
+                    const index = store.index('date');
+                    const request = index.getAll();
+
+                    request.onsuccess = () => {
+                        // Sort by date descending (newest first)
+                        const entries = request.result.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        resolve(entries);
+                    };
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async deletePatientsByDateRange(startDate, endDate) {
+                const allPatients = await this.getAllPatients();
+                const patientsToDelete = allPatients.filter(patient => {
+                    const patientDate = new Date(patient.date);
+                    return patientDate >= new Date(startDate) && patientDate <= new Date(endDate);
+                });
+
+                const transaction = this.db.transaction(['patients'], 'readwrite');
+                const store = transaction.objectStore('patients');
+                
+                // Delete each patient in the date range
+                for (const patient of patientsToDelete) {
+                    store.delete(patient.id);
+                }
+
+                // Update app statistics
+                await this.updateAppStats();
+
+                return patientsToDelete.length;
+            }
+
+            async updateAppStats() {
+                const patients = await this.getAllPatients();
+                const totalSize = new Blob([JSON.stringify(patients)]).size;
+                const stats = {
+                    id: 'appStats',
+                    totalPatients: patients.length,
+                    totalSize: totalSize,
+                    lastUpdated: new Date().toISOString()
+                };
+
+                const transaction = this.db.transaction(['settings'], 'readwrite');
+                const store = transaction.objectStore('settings');
+                store.put(stats);
+            }
+
+            async getAppStats() {
+                return new Promise((resolve) => {
+                    const transaction = this.db.transaction(['settings'], 'readonly');
+                    const store = transaction.objectStore('settings');
+                    const request = store.get('appStats');
+
+                    request.onsuccess = () => {
+                        const patients = this.getAllPatients().then(patients => {
+                            const totalSize = new Blob([JSON.stringify(patients)]).size;
+                            const defaultStats = {
+                                totalPatients: patients.length,
+                                totalSize: totalSize,
+                                lastUpdated: new Date().toISOString()
+                            };
+                            resolve(request.result || defaultStats);
+                        });
+                    };
+                    request.onerror = () => {
+                        // Return default stats if error
+                        this.getAllPatients().then(patients => {
+                            const totalSize = new Blob([JSON.stringify(patients)]).size;
+                            resolve({
+                                totalPatients: patients.length,
+                                totalSize: totalSize,
+                                lastUpdated: new Date().toISOString()
+                            });
+                        });
+                    };
+                });
+            }
+
+            async getStorageInfo() {
+                const stats = await this.getAppStats();
+                
+                return {
+                    storageType: 'Browser Storage',
+                    storageLimit: this.storageLimit,
+                    totalSize: stats.totalSize,
+                    patientCount: stats.totalPatients,
+                    readableSize: this.formatBytes(stats.totalSize),
+                    lastUpdated: stats.lastUpdated
+                };
+            }
+
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            async saveServices(services) {
+                const transaction = this.db.transaction(['services'], 'readwrite');
+                const store = transaction.objectStore('services');
+                store.clear();
+                services.forEach(service => store.add(service));
+            }
+
+            async getServices() {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['services'], 'readonly');
+                    const store = transaction.objectStore('services');
+                    const request = store.getAll();
+
+                    request.onsuccess = () => resolve(request.result.length ? request.result : INITIAL_SERVICES);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async saveDoctors(doctors) {
+                const transaction = this.db.transaction(['doctors'], 'readwrite');
+                const store = transaction.objectStore('doctors');
+                store.clear();
+                doctors.forEach(doctor => store.add(doctor));
+            }
+
+            async getDoctors() {
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['doctors'], 'readonly');
+                    const store = transaction.objectStore('doctors');
+                    const request = store.getAll();
+
+                    request.onsuccess = () => resolve(request.result.length ? request.result : INITIAL_DOCTORS);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            // Export all data for backup
+            async exportAllData() {
+                const [patients, services, doctors, stats] = await Promise.all([
+                    this.getAllPatients(),
+                    this.getServices(),
+                    this.getDoctors(),
+                    this.getAppStats()
+                ]);
+
+                return {
+                    patients,
+                    services,
+                    doctors,
+                    stats,
+                    exportDate: new Date().toISOString(),
+                    appVersion: '1.0.0'
+                };
+            }
+
+            // Import data from backup
+            async importData(backupData) {
+                const transaction = this.db.transaction(['patients', 'services', 'doctors'], 'readwrite');
+                
+                // Clear existing data
+                transaction.objectStore('patients').clear();
+                transaction.objectStore('services').clear();
+                transaction.objectStore('doctors').clear();
+
+                // Import new data
+                if (backupData.patients) {
+                    backupData.patients.forEach(patient => {
+                        transaction.objectStore('patients').add(patient);
+                    });
+                }
+
+                if (backupData.services) {
+                    backupData.services.forEach(service => {
+                        transaction.objectStore('services').add(service);
+                    });
+                }
+
+                if (backupData.doctors) {
+                    backupData.doctors.forEach(doctor => {
+                        transaction.objectStore('doctors').add(doctor);
+                    });
+                }
+
+                await this.updateAppStats();
+            }
+        }
+
+        // Date format function - DD/MM/YYYY
+        const formatDate = (dateString) => {
+            const date = new Date(dateString);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+
+        // Download App Component
+        function DownloadApp({ database }) {
+            const [showDownloadInfo, setShowDownloadInfo] = useState(false);
+
+            const downloadApp = () => {
+                // Create a blob of the current HTML page
+                const htmlContent = document.documentElement.outerHTML;
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'Dental-Clinic-Management-App.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                setShowDownloadInfo(true);
+            };
+
+            const downloadDataBackup = async () => {
+                try {
+                    const allData = await database.exportAllData();
+                    const dataStr = JSON.stringify(allData, null, 2);
+                    const blob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dental-clinic-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    alert('Error downloading backup: ' + error.message);
+                }
+            };
+
+            const restoreData = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const backupData = JSON.parse(e.target.result);
+                        if (window.confirm('Are you sure you want to restore this backup? This will replace all current data.')) {
+                            await database.importData(backupData);
+                            alert('Data restored successfully! Please refresh the page.');
+                            window.location.reload();
+                        }
+                    } catch (error) {
+                        alert('Error restoring backup: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            return (
+                <div className="glass-effect rounded-xl p-6 mb-6">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                        <i className="fas fa-download text-green-400"></i>
+                        <span>Download & Backup</span>
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <button
+                            onClick={downloadApp}
+                            className="download-btn p-4 rounded-xl text-white shadow-lg hover-lift transition-all duration-300 flex flex-col items-center justify-center"
+                        >
+                            <i className="fas fa-download text-2xl mb-2"></i>
+                            <span className="font-semibold">Download App</span>
+                            <span className="text-xs opacity-90 mt-1">Save as HTML file</span>
+                        </button>
+                        
+                        <button
+                            onClick={downloadDataBackup}
+                            className="bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-xl text-white shadow-lg hover-lift transition-all duration-300 flex flex-col items-center justify-center"
+                        >
+                            <i className="fas fa-file-export text-2xl mb-2"></i>
+                            <span className="font-semibold">Backup Data</span>
+                            <span className="text-xs opacity-90 mt-1">Export all data</span>
+                        </button>
+                        
+                        <label className="bg-gradient-to-r from-orange-500 to-red-500 p-4 rounded-xl text-white shadow-lg hover-lift transition-all duration-300 flex flex-col items-center justify-center cursor-pointer">
+                            <i className="fas fa-file-import text-2xl mb-2"></i>
+                            <span className="font-semibold">Restore Data</span>
+                            <span className="text-xs opacity-90 mt-1">Import backup</span>
+                            <input
+                                type="file"
+                                accept=".json"
+                                onChange={restoreData}
+                                className="hidden"
+                            />
+                        </label>
+                    </div>
+
+                    {showDownloadInfo && (
+                        <div className="mt-4 p-4 bg-green-900/30 rounded-lg border border-green-500/30">
+                            <h4 className="font-semibold text-green-400 mb-2 flex items-center space-x-2">
+                                <i className="fas fa-info-circle"></i>
+                                <span>App Downloaded Successfully!</span>
+                            </h4>
+                            <p className="text-green-300 text-sm">
+                                You can now open the downloaded HTML file in any browser to run the app offline. 
+                                All your data is stored in the browser's local storage.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="mt-4 p-4 bg-blue-900/30 rounded-lg border border-blue-500/30">
+                        <h4 className="font-semibold text-blue-400 mb-2">How to Use Offline:</h4>
+                        <ul className="text-blue-300 text-sm space-y-1">
+                            <li>• Download the app as HTML file</li>
+                            <li>• Open the file in any browser</li>
+                            <li>• Works completely offline</li>
+                            <li>• Data saves automatically in browser</li>
+                            <li>• Regular backups recommended</li>
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+
+        // Warning Popup Component
+        function WarningPopup({ show, onConfirm, onCancel, message, confirmText = "Delete", cancelText = "Cancel" }) {
+            if (!show) return null;
+
+            return (
+                <div className="popup-overlay">
+                    <div className="popup-content warning-popup fade-in">
+                        <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i className="fas fa-exclamation-triangle text-white text-2xl"></i>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3">Warning!</h3>
+                        <p className="text-red-100 mb-2">{message}</p>
+                        <p className="text-red-200 text-sm mb-6">This action cannot be undone!</p>
+                        <div className="flex space-x-3 justify-center">
+                            <button
+                                onClick={onCancel}
+                                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-300"
+                            >
+                                {cancelText}
+                            </button>
+                            <button
+                                onClick={onConfirm}
+                                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-300 font-semibold"
+                            >
+                                <i className="fas fa-trash mr-2"></i>
+                                {confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Success Popup Component
+        function SuccessPopup({ show, onClose, message }) {
+            if (!show) return null;
+
+            return (
+                <div className="popup-overlay">
+                    <div className="popup-content">
+                        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i className="fas fa-check text-white text-2xl"></i>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Success!</h3>
+                        <p className="text-gray-300 mb-6">{message}</p>
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-2 gradient-bg text-white rounded-lg hover:shadow-lg transition-all duration-300"
+                        >
+                            Continue
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // Data Management Component
+        function DataManagement({ database, entries, doctors, onDataChange }) {
+            const [deleteStartDate, setDeleteStartDate] = useState('');
+            const [deleteEndDate, setDeleteEndDate] = useState('');
+            const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+            const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+            const [successMessage, setSuccessMessage] = useState('');
+            const [storageInfo, setStorageInfo] = useState(null);
+
+            useEffect(() => {
+                loadStorageInfo();
+            }, [entries]);
+
+            const loadStorageInfo = async () => {
+                if (database) {
+                    const info = await database.getStorageInfo();
+                    setStorageInfo(info);
+                }
+            };
+
+            const handleDeleteByDateRange = async () => {
+                if (!deleteStartDate || !deleteEndDate) {
+                    alert('Please select both start and end dates');
+                    return;
+                }
+
+                if (new Date(deleteStartDate) > new Date(deleteEndDate)) {
+                    alert('Start date cannot be after end date');
+                    return;
+                }
+
+                setShowDeleteWarning(true);
+            };
+
+            const confirmDelete = async () => {
+                setShowDeleteWarning(false);
+                
+                try {
+                    const deletedCount = await database.deletePatientsByDateRange(deleteStartDate, deleteEndDate);
+                    
+                    setSuccessMessage(`Successfully deleted ${deletedCount} patient records from ${formatDate(deleteStartDate)} to ${formatDate(deleteEndDate)}`);
+                    setShowSuccessPopup(true);
+                    
+                    // Reset form
+                    setDeleteStartDate('');
+                    setDeleteEndDate('');
+                    
+                    // Reload storage info and refresh data
+                    await loadStorageInfo();
+                    if (onDataChange) onDataChange();
+                    
+                } catch (error) {
+                    alert('Error deleting records: ' + error.message);
+                }
+            };
+
+            const exportToExcel = async () => {
+                try {
+                    const worksheetData = entries.map(entry => {
+                        const doctorDetails = doctors.find(d => d.id === entry.doctorId) || {};
+                        
+                        return {
+                            'Patient ID': entry.patientId,
+                            'Patient Name': entry.patientName,
+                            'Selected Doctor': `${doctorDetails.name || entry.doctorName} (${doctorDetails.specialty || 'Unknown'})`,
+                            'Services': entry.services.map(s => s.name).join(', '),
+                            'Service Prices': entry.services.map(s => `৳${s.price}`).join(', '),
+                            'Number of Services': entry.services.length,
+                            'Subtotal (৳)': entry.subtotal,
+                            'Discount Type': entry.discountType,
+                            'Discount Amount (৳)': entry.discount,
+                            'Total Amount (৳)': entry.total,
+                            'Date': formatDate(entry.date),
+                            'Patient Notes': entry.notes || 'No notes',
+                            'Entry ID': entry.id
+                        };
+                    });
+
+                    const totalRevenue = entries.reduce((sum, entry) => sum + entry.total, 0);
+                    const summaryRow = {
+                        'Patient ID': 'SUMMARY',
+                        'Patient Name': '',
+                        'Selected Doctor': '',
+                        'Services': '',
+                        'Service Prices': '',
+                        'Number of Services': `Total Entries: ${entries.length}`,
+                        'Subtotal (৳)': `Total Revenue: ৳${totalRevenue}`,
+                        'Discount Type': '',
+                        'Discount Amount (৳)': '',
+                        'Total Amount (৳)': '',
+                        'Date': '',
+                        'Patient Notes': '',
+                        'Entry ID': ''
+                    };
+
+                    const dataWithSummary = [...worksheetData, summaryRow];
+                    const worksheet = XLSX.utils.json_to_sheet(dataWithSummary);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dentals Data');
+                    
+                    worksheet['!cols'] = [
+                        { wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 40 }, { wch: 30 },
+                        { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 15 },
+                        { wch: 15 }, { wch: 30 }, { wch: 15 }
+                    ];
+
+                    XLSX.writeFile(workbook, `dentals-data-${new Date().toISOString().split('T')[0]}.xlsx`);
+                    
+                    setSuccessMessage('Excel file downloaded successfully with all patient data!');
+                    setShowSuccessPopup(true);
+                    
+                } catch (error) {
+                    alert('Error exporting to Excel: ' + error.message);
+                }
+            };
+
+            return (
+                <div className="container-standard py-6">
+                    <WarningPopup 
+                        show={showDeleteWarning}
+                        onConfirm={confirmDelete}
+                        onCancel={() => setShowDeleteWarning(false)}
+                        message={`Are you sure you want to delete ALL patient records from ${formatDate(deleteStartDate)} to ${formatDate(deleteEndDate)}?`}
+                        confirmText="Delete Records"
+                    />
+                    
+                    <SuccessPopup 
+                        show={showSuccessPopup}
+                        onClose={() => setShowSuccessPopup(false)}
+                        message={successMessage}
+                    />
+                    
+                    <div className="glass-effect rounded-2xl shadow-xl p-6 mb-6 card-glow slide-in">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h2 className="text-2xl font-bold gradient-text">Data Management</h2>
+                                <p className="text-gray-400 mt-1 text-sm">Manage your dental clinic data</p>
+                            </div>
+                            <div className="gradient-bg p-3 rounded-xl shadow-lg">
+                                <i className="fas fa-database text-white text-xl"></i>
+                            </div>
+                        </div>
+
+                        {/* Download App Section */}
+                        <DownloadApp database={database} />
+
+                        {/* Storage Information */}
+                        {storageInfo && (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-xl text-white text-center">
+                                    <i className="fas fa-hdd text-2xl mb-2"></i>
+                                    <div className="text-lg font-bold">{storageInfo.storageType}</div>
+                                    <div className="text-sm opacity-90">{storageInfo.storageLimit}</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-green-500 to-teal-600 p-4 rounded-xl text-white text-center">
+                                    <i className="fas fa-chart-pie text-2xl mb-2"></i>
+                                    <div className="text-lg font-bold">{storageInfo.readableSize}</div>
+                                    <div className="text-sm opacity-90">Used Space</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-xl text-white text-center">
+                                    <i className="fas fa-users text-2xl mb-2"></i>
+                                    <div className="text-lg font-bold">{storageInfo.patientCount}</div>
+                                    <div className="text-sm opacity-90">Total Patients</div>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-4 rounded-xl text-white text-center">
+                                    <i className="fas fa-user-md text-2xl mb-2"></i>
+                                    <div className="text-lg font-bold">{doctors.length}</div>
+                                    <div className="text-sm opacity-90">Active Doctors</div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Export to Excel */}
+                        <div className="glass-effect rounded-xl p-6 mb-6">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                                <i className="fas fa-file-excel text-green-400"></i>
+                                <span>Export Data to Excel</span>
+                            </h3>
+                            
+                            <button
+                                onClick={exportToExcel}
+                                className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 justify-center mb-3"
+                            >
+                                <i className="fas fa-file-excel"></i>
+                                <span>Export All Data to Excel</span>
+                            </button>
+                            
+                            <p className="text-sm text-gray-400">
+                                Download complete patient database as Excel file for reporting and analysis.
+                            </p>
+                        </div>
+
+                        {/* Delete by Date Range */}
+                        <div className="glass-effect rounded-xl p-6">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                                <i className="fas fa-calendar-times text-red-400"></i>
+                                <span>Delete Records by Date Range</span>
+                            </h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                        Start Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={deleteStartDate}
+                                        onChange={(e) => setDeleteStartDate(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gray-700/80 transition-all duration-300 text-white"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                                        End Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={deleteEndDate}
+                                        onChange={(e) => setDeleteEndDate(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-gray-700/80 transition-all duration-300 text-white"
+                                    />
+                                </div>
+                                
+                                <div className="flex items-end">
+                                    <button
+                                        onClick={handleDeleteByDateRange}
+                                        className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 justify-center"
+                                        disabled={!deleteStartDate || !deleteEndDate}
+                                    >
+                                        <i className="fas fa-trash"></i>
+                                        <span>Delete Records</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <p className="text-sm text-gray-400">
+                                This will permanently delete all patient records within the selected date range. This action cannot be undone.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Header Component
+        function Header({ activeTab, setActiveTab }) {
+            return (
+                <header className="glass-effect sticky top-0 z-50 border-b border-gray-700/50">
+                    <div className="container-standard px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between items-center h-16">
+                            <div className="flex items-center space-x-3">
+                                <div className="gradient-bg w-10 h-10 rounded-xl flex items-center justify-center shadow-lg">
+                                    <i className="fas fa-tooth text-white text-lg"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                        Dentals Data
+                                    </h1>
+                                    <p className="text-xs text-gray-400">
+                                        Offline Desktop App
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center space-x-4">
+                                <nav className="flex space-x-1 bg-gray-800/80 p-1 rounded-xl shadow-lg">
+                                    <button
+                                        onClick={() => setActiveTab('entry')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-2 text-sm ${
+                                            activeTab === 'entry'
+                                                ? 'gradient-bg text-white shadow-md'
+                                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <i className="fas fa-user-plus"></i>
+                                        <span>Patient Entry</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('analytics')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-2 text-sm ${
+                                            activeTab === 'analytics'
+                                                ? 'gradient-bg text-white shadow-md'
+                                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <i className="fas fa-chart-bar"></i>
+                                        <span>Analytics</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('management')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-2 text-sm ${
+                                            activeTab === 'management'
+                                                ? 'gradient-bg text-white shadow-md'
+                                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <i className="fas fa-database"></i>
+                                        <span>Data Management</span>
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+
+        // Service Card Component
+        function ServiceCard({ service, isSelected, onToggle, onDelete }) {
+            return (
+                <div
+                    className={`p-3 rounded-lg border cursor-pointer transition-all duration-300 relative ${
+                        isSelected
+                            ? 'border-blue-500 bg-blue-900/20 shadow-md'
+                            : 'border-gray-600 bg-gray-700/50 hover:border-blue-300'
+                    }`}
+                    onClick={() => onToggle(service)}
+                >
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(service.id);
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow-lg hover:bg-red-600 transition-colors z-10"
+                        title="Delete service"
+                    >
+                        <i className="fas fa-times text-xs w-3 h-3"></i>
+                    </button>
+                    
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-lg">{service.icon}</span>
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            isSelected
+                                ? 'bg-blue-500 border-blue-500'
+                                : 'border-gray-500'
+                        }`}>
+                            {isSelected && <i className="fas fa-check text-white text-xs"></i>}
+                        </div>
+                    </div>
+                    <div className="text-xs font-semibold text-white truncate">{service.name}</div>
+                    <div className="text-sm font-bold text-green-400">৳{service.price}</div>
+                </div>
+            );
+        }
+
+        // Patient Entry Component
+        function PatientEntry({ database, services, setServices, doctors, setDoctors, onDataChange }) {
+            const [patientId, setPatientId] = useState('');
+            const [patientName, setPatientName] = useState('');
+            const [selectedDoctor, setSelectedDoctor] = useState('');
+            const [selectedServices, setSelectedServices] = useState([]);
+            const [discount, setDiscount] = useState(0);
+            const [discountType, setDiscountType] = useState(DiscountType.Fixed);
+            const [newServiceName, setNewServiceName] = useState('');
+            const [newServicePrice, setNewServicePrice] = useState('');
+            const [newDoctorName, setNewDoctorName] = useState('');
+            const [newDoctorSpecialty, setNewDoctorSpecialty] = useState('');
+            const [showAllServices, setShowAllServices] = useState(false);
+            const [showAddServiceForm, setShowAddServiceForm] = useState(false);
+            const [serviceSearch, setServiceSearch] = useState('');
+            const [patientNotes, setPatientNotes] = useState('');
+            const [showAddDoctorForm, setShowAddDoctorForm] = useState(false);
+            const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+            const subtotal = selectedServices.reduce((sum, service) => sum + service.price, 0);
+            
+            const total = useMemo(() => {
+                let calculatedTotal = subtotal;
+                if (discountType === DiscountType.Fixed) {
+                    calculatedTotal -= discount;
+                } else {
+                    calculatedTotal -= (subtotal * discount) / 100;
+                }
+                return Math.max(0, calculatedTotal);
+            }, [subtotal, discount, discountType]);
+
+            const filteredServices = useMemo(() => {
+                return services.filter(service =>
+                    service.name.toLowerCase().includes(serviceSearch.toLowerCase())
+                );
+            }, [services, serviceSearch]);
+
+            const displayedServices = showAllServices ? filteredServices : filteredServices.slice(0, 3);
+
+            const handleServiceToggle = (service) => {
+                setSelectedServices(prev =>
+                    prev.some(s => s.id === service.id)
+                        ? prev.filter(s => s.id !== service.id)
+                        : [...prev, service]
+                );
+            };
+
+            const handleDeleteService = async (serviceId) => {
+                if (window.confirm('Are you sure you want to delete this service? This action cannot be undone.')) {
+                    const updatedServices = services.filter(service => service.id !== serviceId);
+                    setServices(updatedServices);
+                    await database.saveServices(updatedServices);
+                    setSelectedServices(prev => prev.filter(service => service.id !== serviceId));
+                }
+            };
+
+            const addService = async () => {
+                if (newServiceName && newServicePrice) {
+                    const newService = {
+                        id: 's' + Date.now(),
+                        name: newServiceName,
+                        price: Number(newServicePrice),
+                        icon: '🦷'
+                    };
+                    const updatedServices = [...services, newService];
+                    setServices(updatedServices);
+                    await database.saveServices(updatedServices);
+                    setNewServiceName('');
+                    setNewServicePrice('');
+                    setShowAddServiceForm(false);
+                }
+            };
+
+            const addDoctor = async () => {
+                if (newDoctorName && newDoctorSpecialty) {
+                    const newDoctor = {
+                        id: 'd' + Date.now(),
+                        name: newDoctorName,
+                        specialty: newDoctorSpecialty,
+                        experience: 'New',
+                        icon: '👨‍⚕️'
+                    };
+                    const updatedDoctors = [...doctors, newDoctor];
+                    setDoctors(updatedDoctors);
+                    await database.saveDoctors(updatedDoctors);
+                    setNewDoctorName('');
+                    setNewDoctorSpecialty('');
+                    setSelectedDoctor(newDoctor.id);
+                    setShowAddDoctorForm(false);
+                }
+            };
+
+            const handleDeleteDoctor = async (doctorId) => {
+                if (window.confirm('Are you sure you want to delete this doctor? This will remove them from future entries but existing records will remain.')) {
+                    const updatedDoctors = doctors.filter(doctor => doctor.id !== doctorId);
+                    setDoctors(updatedDoctors);
+                    await database.saveDoctors(updatedDoctors);
+                    if (selectedDoctor === doctorId) {
+                        setSelectedDoctor('');
+                    }
+                }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!patientId || !patientName || !selectedDoctor || selectedServices.length === 0) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+
+                const selectedDoctorData = doctors.find(d => d.id === selectedDoctor);
+                
+                const newEntry = {
+                    id: 'inv' + Date.now(),
+                    patientId,
+                    patientName,
+                    doctorId: selectedDoctor,
+                    doctorName: selectedDoctorData ? selectedDoctorData.name : 'Unknown Doctor',
+                    doctorIcon: selectedDoctorData ? selectedDoctorData.icon : '👨‍⚕️',
+                    doctorSpecialty: selectedDoctorData ? selectedDoctorData.specialty : 'Unknown',
+                    services: selectedServices,
+                    discount,
+                    discountType,
+                    subtotal,
+                    total,
+                    date: new Date().toISOString(),
+                    notes: patientNotes
+                };
+
+                try {
+                    await database.savePatient(newEntry);
+                    setShowSuccessPopup(true);
+                    
+                    if (onDataChange) onDataChange();
+                    
+                    setTimeout(() => {
+                        setPatientId('');
+                        setPatientName('');
+                        setSelectedDoctor('');
+                        setSelectedServices([]);
+                        setDiscount(0);
+                        setDiscountType(DiscountType.Fixed);
+                        setServiceSearch('');
+                        setPatientNotes('');
+                    }, 500);
+                } catch (error) {
+                    alert('Error saving patient: ' + error.message);
+                }
+            };
+
+            return (
+                <div className="container-standard py-6">
+                    <SuccessPopup 
+                        show={showSuccessPopup}
+                        onClose={() => setShowSuccessPopup(false)}
+                        message="Patient entry has been saved successfully!"
+                    />
+                    
+                    <div className="glass-effect rounded-2xl shadow-xl p-6 mb-6 card-glow slide-in">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h2 className="text-2xl font-bold gradient-text">New Patient Entry</h2>
+                                <p className="text-gray-400 mt-1 text-sm">Add new patient records and treatment details</p>
+                            </div>
+                            <div className="gradient-bg p-3 rounded-xl shadow-lg">
+                                <i className="fas fa-user-injured text-white text-xl"></i>
+                            </div>
+                        </div>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            {/* Patient Information */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                        <label className="block text-sm font-semibold text-gray-300 mb-3 flex items-center space-x-2">
+                                            <i className="fas fa-id-card text-blue-400"></i>
+                                            <span>Patient ID *</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={patientId}
+                                            onChange={(e) => setPatientId(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            placeholder="Enter patient ID"
+                                            required
+                                        />
+                                    </div>
+                                    
+                                    <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                        <label className="block text-sm font-semibold text-gray-300 mb-3 flex items-center space-x-2">
+                                            <i className="fas fa-user text-green-400"></i>
+                                            <span>Patient Name *</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={patientName}
+                                            onChange={(e) => setPatientName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            placeholder="Enter patient full name"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                        <label className="block text-sm font-semibold text-gray-300 mb-3 flex items-center space-x-2">
+                                            <i className="fas fa-sticky-note text-purple-400"></i>
+                                            <span>Patient Notes (Optional)</span>
+                                        </label>
+                                        <textarea
+                                            value={patientNotes}
+                                            onChange={(e) => setPatientNotes(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            placeholder="Add any notes about the patient or treatment..."
+                                            rows="2"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Doctor Selection */}
+                                <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className="block text-sm font-semibold text-gray-300 flex items-center space-x-2">
+                                            <i className="fas fa-user-md text-purple-400"></i>
+                                            <span>Select Doctor *</span>
+                                        </label>
+                                        
+                                        <div className="flex space-x-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAddDoctorForm(!showAddDoctorForm)}
+                                                className="px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-lg hover-lift transition-all duration-300 flex items-center space-x-1 text-xs"
+                                            >
+                                                <i className="fas fa-plus"></i>
+                                                <span>Add Doctor</span>
+                                            </button>
+                                            
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (selectedDoctor) {
+                                                        handleDeleteDoctor(selectedDoctor);
+                                                    } else {
+                                                        alert('Please select a doctor first');
+                                                    }
+                                                }}
+                                                className="px-2 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 shadow-lg hover-lift transition-all duration-300 flex items-center space-x-1 text-xs"
+                                                title="Delete selected doctor"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                                <span>Delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <select
+                                        value={selectedDoctor}
+                                        onChange={(e) => setSelectedDoctor(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 mb-3 transition-all duration-300 text-sm text-white"
+                                        required
+                                    >
+                                        <option value="">Choose a doctor...</option>
+                                        {doctors.map(doctor => (
+                                            <option key={doctor.id} value={doctor.id}>
+                                                {doctor.icon} {doctor.name} - {doctor.specialty}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    {showAddDoctorForm && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-gradient-to-r from-green-900/20 to-blue-900/20 rounded-lg mt-3 fade-in">
+                                            <input
+                                                type="text"
+                                                value={newDoctorName}
+                                                onChange={(e) => setNewDoctorName(e.target.value)}
+                                                placeholder="Doctor name"
+                                                className="px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={newDoctorSpecialty}
+                                                onChange={(e) => setNewDoctorSpecialty(e.target.value)}
+                                                placeholder="Specialty"
+                                                className="px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            />
+                                            <div className="flex gap-2 md:col-span-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={addDoctor}
+                                                    className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-lg hover-lift transition-all duration-300 flex items-center space-x-2 justify-center text-sm"
+                                                >
+                                                    <i className="fas fa-check"></i>
+                                                    <span>Save Doctor</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowAddDoctorForm(false)}
+                                                    className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-lg hover-lift transition-all duration-300"
+                                                >
+                                                    <i className="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Services Selection */}
+                            <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 gap-3">
+                                    <label className="block text-sm font-semibold text-gray-300 flex items-center space-x-2">
+                                        <i className="fas fa-teeth text-red-400"></i>
+                                        <span>Select Services *</span>
+                                    </label>
+                                    
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <div className="relative">
+                                            <i className="fas fa-search absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                                            <input
+                                                type="text"
+                                                value={serviceSearch}
+                                                onChange={(e) => setServiceSearch(e.target.value)}
+                                                placeholder="Search services..."
+                                                className="w-full sm:w-48 pl-8 pr-4 py-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            />
+                                            {serviceSearch && (
+                                                <button
+                                                    onClick={() => setServiceSearch('')}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                                                >
+                                                    <i className="fas fa-times text-sm"></i>
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAddServiceForm(!showAddServiceForm)}
+                                            className="px-2 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg hover-lift transition-all duration-300 flex items-center space-x-1 justify-center text-xs"
+                                        >
+                                            <i className="fas fa-plus-circle"></i>
+                                            <span>Add Service</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {showAddServiceForm && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg mb-3 fade-in">
+                                        <input
+                                            type="text"
+                                            value={newServiceName}
+                                            onChange={(e) => setNewServiceName(e.target.value)}
+                                            placeholder="Service name"
+                                            className="px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={newServicePrice}
+                                            onChange={(e) => setNewServicePrice(e.target.value)}
+                                            placeholder="Price"
+                                            className="px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={addService}
+                                                className="flex-1 px-3 py-2 gradient-bg text-white rounded-lg hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md hover-lift transition-all duration-300 flex items-center space-x-2 justify-center text-sm"
+                                            >
+                                                <i className="fas fa-check"></i>
+                                                <span>Save</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAddServiceForm(false)}
+                                                className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-md hover-lift transition-all duration-300"
+                                                >
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className={`grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 ${showAllServices ? 'max-h-60 overflow-y-auto scrollbar-thin p-2' : ''}`}>
+                                    {displayedServices.length === 0 ? (
+                                        <div className="col-span-full text-center py-6 text-gray-400">
+                                            <i className="fas fa-search text-2xl mb-2"></i>
+                                            <div className="text-sm">No services found matching "{serviceSearch}"</div>
+                                        </div>
+                                    ) : (
+                                        displayedServices.map(service => (
+                                            <ServiceCard
+                                                key={service.id}
+                                                service={service}
+                                                isSelected={selectedServices.some(s => s.id === service.id)}
+                                                onToggle={handleServiceToggle}
+                                                onDelete={handleDeleteService}
+                                            />
+                                        ))
+                                    )}
+                                </div>
+
+                                {filteredServices.length > 3 && (
+                                    <div className="flex justify-center mb-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAllServices(!showAllServices)}
+                                            className="px-3 py-1 text-blue-400 hover:text-blue-300 flex items-center space-x-1 text-sm"
+                                        >
+                                            <i className={`fas fa-chevron-${showAllServices ? 'up' : 'down'}`}></i>
+                                            <span>{showAllServices ? 'Show Less' : `Show All ${filteredServices.length} Services`}</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {selectedServices.length > 0 && (
+                                    <div className="mb-3 p-3 bg-gradient-to-r from-green-900/20 to-blue-900/20 rounded-lg">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="font-semibold text-gray-300 text-xs">
+                                                Selected Services ({selectedServices.length})
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedServices([])}
+                                                className="text-red-400 hover:text-red-300 text-xs flex items-center space-x-1"
+                                            >
+                                                <i className="fas fa-times"></i>
+                                                <span>Clear All</span>
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto scrollbar-thin">
+                                            {selectedServices.map(service => (
+                                                <span
+                                                    key={service.id}
+                                                    className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-200"
+                                                >
+                                                    {service.icon} {service.name} - ৳{service.price}
+                                                    <button
+                                                        onClick={() => handleServiceToggle(service)}
+                                                        className="ml-1 text-blue-400 hover:text-blue-300"
+                                                    >
+                                                        <i className="fas fa-times text-xs"></i>
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Discount and Summary */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                    <label className="block text-sm font-semibold text-gray-300 mb-3 flex items-center space-x-2">
+                                        <i className="fas fa-tag text-orange-400"></i>
+                                        <span>Discount Settings</span>
+                                    </label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs text-gray-400 mb-1">Discount Type</label>
+                                            <select
+                                                value={discountType}
+                                                onChange={(e) => setDiscountType(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                            >
+                                                <option value={DiscountType.Fixed}>Fixed Amount (-৳)</option>
+                                                <option value={DiscountType.Percentage}>Percentage (-%)</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs text-gray-400 mb-1">
+                                                {discountType === DiscountType.Percentage ? 'Discount Percentage (-%)' : 'Discount Amount (-৳)'}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={discount}
+                                                onChange={(e) => setDiscount(Number(e.target.value))}
+                                                className="w-full px-3 py-2 border border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                                min="0"
+                                                max={discountType === DiscountType.Percentage ? 100 : subtotal}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="gradient-bg p-4 rounded-xl shadow-xl text-white hover-lift">
+                                    <h3 className="text-base font-semibold mb-3 flex items-center space-x-2">
+                                        <i className="fas fa-receipt"></i>
+                                        <span>Payment Summary</span>
+                                    </h3>
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span>Selected Services:</span>
+                                            <span className="font-medium text-right max-w-xs text-xs">
+                                                {selectedServices.map(s => s.name).join(', ')}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span>Subtotal:</span>
+                                            <span className="text-base font-bold">৳{subtotal}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span>Discount:</span>
+                                            <span className="text-base font-bold text-red-200">
+                                                -৳{discountType === DiscountType.Fixed ? discount : (subtotal * discount / 100)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-white/30 pt-2 mt-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-semibold">Total Amount:</span>
+                                                <span className="text-xl font-bold text-green-200">৳{total}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-center pt-3">
+                                <button
+                                    type="submit"
+                                    className="px-6 py-3 gradient-bg text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover-lift flex items-center space-x-2 text-sm"
+                                >
+                                    <i className="fas fa-save"></i>
+                                    <span>Save Patient Entry</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // Income Analytics Component
+        function IncomeAnalytics({ entries, doctors, deleteInvoiceEntry, onDataChange }) {
+            const [selectedDoctor, setSelectedDoctor] = useState('all');
+            const [dateRange, setDateRange] = useState({ start: '', end: '' });
+            const [searchTerm, setSearchTerm] = useState('');
+
+            const filteredEntries = useMemo(() => {
+                return entries.filter(entry => {
+                    const matchesDoctor = selectedDoctor === 'all' || entry.doctorId === selectedDoctor;
+                    const entryDate = new Date(entry.date);
+                    const startDate = dateRange.start ? new Date(dateRange.start) : new Date(0);
+                    const endDate = dateRange.end ? new Date(dateRange.end) : new Date();
+                    
+                    if (dateRange.end) {
+                        endDate.setHours(23, 59, 59, 999);
+                    }
+                    
+                    const matchesDate = entryDate >= startDate && entryDate <= endDate;
+                    
+                    const matchesSearch = searchTerm === '' || 
+                        entry.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        entry.patientId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        formatDate(entry.date).includes(searchTerm);
+                    
+                    return matchesDoctor && matchesDate && matchesSearch;
+                });
+            }, [entries, selectedDoctor, dateRange, searchTerm]);
+
+            const getDoctorDetails = (entry) => {
+                const currentDoctor = doctors.find(d => d.id === entry.doctorId);
+                
+                if (currentDoctor) {
+                    return {
+                        name: currentDoctor.name,
+                        icon: currentDoctor.icon,
+                        specialty: currentDoctor.specialty
+                    };
+                }
+                
+                return {
+                    name: entry.doctorName || 'Unknown Doctor',
+                    icon: entry.doctorIcon || '👨‍⚕️',
+                    specialty: entry.doctorSpecialty || 'Unknown Specialty'
+                };
+            };
+
+            const analytics = useMemo(() => {
+                const doctorEarnings = {};
+                const serviceCount = {};
+                let totalRevenue = 0;
+
+                filteredEntries.forEach(entry => {
+                    totalRevenue += entry.total;
+                    
+                    doctorEarnings[entry.doctorId] = (doctorEarnings[entry.doctorId] || 0) + entry.total;
+                    
+                    entry.services.forEach(service => {
+                        serviceCount[service.name] = (serviceCount[service.name] || 0) + 1;
+                    });
+                });
+
+                return { doctorEarnings, serviceCount, totalRevenue };
+            }, [filteredEntries]);
+
+            const exportToExcel = () => {
+                const worksheetData = filteredEntries.map(entry => {
+                    const doctorDetails = getDoctorDetails(entry);
+                    
+                    return {
+                        'Patient ID': entry.patientId,
+                        'Patient Name': entry.patientName,
+                        'Selected Doctor': `${doctorDetails.name} (${doctorDetails.specialty})`,
+                        'Services': entry.services.map(s => s.name).join(', '),
+                        'Service Prices': entry.services.map(s => `৳${s.price}`).join(', '),
+                        'Number of Services': entry.services.length,
+                        'Subtotal (৳)': entry.subtotal,
+                        'Discount Type': entry.discountType,
+                        'Discount Amount (৳)': entry.discount,
+                        'Total Amount (৳)': entry.total,
+                        'Date': formatDate(entry.date),
+                        'Patient Notes': entry.notes || 'No notes',
+                        'Entry ID': entry.id
+                    };
+                });
+
+                const summaryRow = {
+                    'Patient ID': 'SUMMARY',
+                    'Patient Name': '',
+                    'Selected Doctor': '',
+                    'Services': '',
+                    'Service Prices': '',
+                    'Number of Services': `Total Entries: ${filteredEntries.length}`,
+                    'Subtotal (৳)': `Total Revenue: ৳${analytics.totalRevenue}`,
+                    'Discount Type': '',
+                    'Discount Amount (৳)': '',
+                    'Total Amount (৳)': '',
+                    'Date': '',
+                    'Patient Notes': '',
+                    'Entry ID': ''
+                };
+
+                const dataWithSummary = [...worksheetData, summaryRow];
+                const worksheet = XLSX.utils.json_to_sheet(dataWithSummary);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Dentals Data');
+                
+                worksheet['!cols'] = [
+                    { wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 40 }, { wch: 30 },
+                    { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 15 },
+                    { wch: 15 }, { wch: 30 }, { wch: 15 }
+                ];
+
+                XLSX.writeFile(workbook, `dentals-data-${new Date().toISOString().split('T')[0]}.xlsx`);
+            };
+
+            const handleDeleteEntry = async (id) => {
+                if (window.confirm('Are you sure you want to delete this entry? This action cannot be undone.')) {
+                    deleteInvoiceEntry(id);
+                    if (onDataChange) onDataChange();
+                }
+            };
+
+            return (
+                <div className="container-standard py-6">
+                    <div className="glass-effect rounded-2xl shadow-xl p-6 card-glow slide-in">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
+                            <div>
+                                <h2 className="text-2xl font-bold gradient-text">Income Analytics</h2>
+                                <p className="text-gray-400 mt-1 text-sm">Comprehensive financial insights and reports</p>
+                            </div>
+                            
+                            <div className="relative max-w-md">
+                                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Search by patient name, ID, or date..."
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                />
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                                    >
+                                        <i className="fas fa-times"></i>
+                                    </button>
+                                )}
+                            </div>
+                            
+                            <button
+                                onClick={exportToExcel}
+                                className="px-4 py-2 gradient-bg text-white rounded-xl hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 shadow-md hover-lift transition-all duration-300 flex items-center space-x-2 text-sm"
+                            >
+                                <i className="fas fa-file-excel"></i>
+                                <span>Export to Excel</span>
+                            </button>
+                        </div>
+
+                        {/* Filters */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-gray-800/50 p-3 rounded-xl shadow-lg hover-lift">
+                                <label className="block text-sm font-semibold text-gray-300 mb-1">
+                                    <i className="fas fa-user-md mr-1"></i>
+                                    Filter by Doctor
+                                </label>
+                                <select
+                                    value={selectedDoctor}
+                                    onChange={(e) => setSelectedDoctor(e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                >
+                                    <option value="all">All Doctors</option>
+                                    {doctors.map(doctor => (
+                                        <option key={doctor.id} value={doctor.id}>
+                                            {doctor.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                            <div className="bg-gray-800/50 p-3 rounded-xl shadow-lg hover-lift">
+                                <label className="block text-sm font-semibold text-gray-300 mb-1">
+                                    <i className="fas fa-calendar-start mr-1"></i>
+                                    Start Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={dateRange.start}
+                                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                    className="w-full px-2 py-1 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                />
+                            </div>
+                            
+                            <div className="bg-gray-800/50 p-3 rounded-xl shadow-lg hover-lift">
+                                <label className="block text-sm font-semibold text-gray-300 mb-1">
+                                    <i className="fas fa-calendar-end mr-1"></i>
+                                    End Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={dateRange.end}
+                                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                    className="w-full px-2 py-1 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700/80 transition-all duration-300 text-sm text-white"
+                                />
+                            </div>
+                            
+                            <div className="bg-gradient-to-r from-green-500 to-blue-500 p-3 rounded-xl shadow-lg text-white text-center hover-lift">
+                                <div className="text-xl font-bold">{filteredEntries.length}</div>
+                                <div className="text-xs">Total Entries</div>
+                            </div>
+                        </div>
+
+                        {/* Analytics Summary */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-xl text-white shadow-xl hover-lift text-center">
+                                <i className="fas fa-money-bill-wave text-2xl mb-2"></i>
+                                <div className="text-2xl font-bold">৳{analytics.totalRevenue}</div>
+                                <div className="text-blue-100 text-xs">Total Revenue</div>
+                            </div>
+                            
+                            <div className="bg-gradient-to-r from-green-500 to-teal-600 p-4 rounded-xl text-white shadow-xl hover-lift text-center">
+                                <i className="fas fa-chart-line text-2xl mb-2"></i>
+                                <div className="text-2xl font-bold">{Object.keys(analytics.serviceCount).length}</div>
+                                <div className="text-green-100 text-xs">Services Used</div>
+                            </div>
+                            
+                            <div className="bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-xl text-white shadow-xl hover-lift text-center">
+                                <i className="fas fa-users text-2xl mb-2"></i>
+                                <div className="text-2xl font-bold">{doctors.length}</div>
+                                <div className="text-orange-100 text-xs">Active Doctors</div>
+                            </div>
+                        </div>
+
+                        {/* Doctor Earnings */}
+                        <div className="mb-6">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                                <i className="fas fa-trophy text-yellow-400"></i>
+                                <span>Doctor Performance</span>
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {doctors.map(doctor => {
+                                    const earnings = analytics.doctorEarnings[doctor.id] || 0;
+                                    const percentage = analytics.totalRevenue > 0 ? (earnings / analytics.totalRevenue * 100).toFixed(1) : 0;
+                                    
+                                    return (
+                                        <div key={doctor.id} className="bg-gray-800/50 p-4 rounded-xl shadow-lg hover-lift">
+                                            <div className="flex items-center space-x-3 mb-3">
+                                                <div className="text-2xl">{doctor.icon}</div>
+                                                <div className="flex-1">
+                                                    <div className="font-semibold text-white text-sm">{doctor.name}</div>
+                                                    <div className="text-xs text-gray-400">{doctor.specialty}</div>
+                                                </div>
+                                            </div>
+                                            <div className="text-xl font-bold text-green-400 mb-2">৳{earnings}</div>
+                                            <div className="w-full bg-gray-700 rounded-full h-2">
+                                                <div 
+                                                    className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full transition-all duration-1000"
+                                                    style={{ width: `${percentage}%` }}
+                                                ></div>
+                                            </div>
+                                            <div className="text-xs text-gray-400 mt-1">{percentage}% of total</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Entries Table */}
+                        <div>
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                                <i className="fas fa-list text-gray-400"></i>
+                                <span>Recent Entries ({filteredEntries.length})</span>
+                            </h3>
+                            {filteredEntries.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <i className="fas fa-inbox text-3xl text-gray-400 mb-3"></i>
+                                    <div className="text-gray-400 text-sm">
+                                        {searchTerm ? 'No entries found matching your search.' : 'No entries found for the selected filters.'}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="overflow-hidden rounded-xl shadow-lg">
+                                    <table className="min-w-full divide-y divide-gray-700">
+                                        <thead className="bg-gradient-to-r from-gray-700 to-gray-800">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Patient Details
+                                                </th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Doctor
+                                                </th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Services
+                                                </th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Amount
+                                                </th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Date
+                                                </th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                                                    Actions
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                            {filteredEntries.map(entry => {
+                                                const doctorDetails = getDoctorDetails(entry);
+                                                
+                                                return (
+                                                    <tr key={entry.id} className="hover:bg-gray-700/50 transition-colors">
+                                                        <td className="px-4 py-2 whitespace-nowrap">
+                                                            <div className="flex items-center space-x-2">
+                                                                <div className="bg-blue-900 p-1 rounded-lg">
+                                                                    <i className="fas fa-user text-blue-400 text-sm"></i>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-semibold text-white text-sm">
+                                                                        {entry.patientName}
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-400">
+                                                                        ID: {entry.patientId}
+                                                                    </div>
+                                                                    {entry.notes && (
+                                                                        <div className="text-xs text-gray-500 mt-1">
+                                                                            <i className="fas fa-sticky-note mr-1"></i>
+                                                                            {entry.notes}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">
+                                                            <div className="flex items-center space-x-2">
+                                                                <span className="text-base">{doctorDetails.icon}</span>
+                                                                <div>
+                                                                    <div className="text-sm text-white font-medium">
+                                                                        {doctorDetails.name}
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-400">
+                                                                        {doctorDetails.specialty}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {entry.services.slice(0, 2).map(service => (
+                                                                    <span key={service.id} className="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-200">
+                                                                        {service.name}
+                                                                    </span>
+                                                                ))}
+                                                                {entry.services.length > 2 && (
+                                                                    <span className="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
+                                                                        +{entry.services.length - 2} more
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">
+                                                            <div className="text-base font-bold text-green-400">
+                                                                ৳{entry.total}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-white">
+                                                            {formatDate(entry.date)}
+                                                        </td>
+                                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                                            <button
+                                                                onClick={() => handleDeleteEntry(entry.id)}
+                                                                className="text-red-400 hover:text-red-300 transition-colors duration-200 flex items-center space-x-1 text-xs"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                                <span>Delete</span>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [activeTab, setActiveTab] = useState('entry');
+            const [database, setDatabase] = useState(null);
+            const [services, setServices] = useState(INITIAL_SERVICES);
+            const [doctors, setDoctors] = useState(INITIAL_DOCTORS);
+            const [invoiceEntries, setInvoiceEntries] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                const initDatabase = async () => {
+                    try {
+                        const db = new BrowserStorageSystem();
+                        await db.init();
+                        setDatabase(db);
+
+                        const [loadedServices, loadedDoctors, loadedPatients] = await Promise.all([
+                            db.getServices(),
+                            db.getDoctors(),
+                            db.getAllPatients()
+                        ]);
+
+                        setServices(loadedServices);
+                        setDoctors(loadedDoctors);
+                        setInvoiceEntries(loadedPatients);
+                        setLoading(false);
+                    } catch (error) {
+                        console.error('Database initialization failed:', error);
+                        setLoading(false);
+                    }
+                };
+
+                initDatabase();
+            }, []);
+
+            const refreshData = async () => {
+                if (database) {
+                    const patients = await database.getAllPatients();
+                    setInvoiceEntries(patients);
+                }
+            };
+
+            const addInvoiceEntry = async (entry) => {
+                if (database) {
+                    await database.savePatient(entry);
+                    await refreshData();
+                }
+            };
+
+            const deleteInvoiceEntry = async (id) => {
+                setInvoiceEntries(prev => prev.filter(entry => entry.id !== id));
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="gradient-bg w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4">
+                                <i className="fas fa-tooth text-white text-2xl"></i>
+                            </div>
+                            <h2 className="text-xl font-bold text-white mb-2">Loading Dental Clinic App</h2>
+                            <p className="text-gray-400">Initializing browser storage...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen">
+                    <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <main>
+                        {activeTab === 'entry' && (
+                            <PatientEntry
+                                database={database}
+                                services={services}
+                                setServices={setServices}
+                                doctors={doctors}
+                                setDoctors={setDoctors}
+                                onDataChange={refreshData}
+                            />
+                        )}
+                        {activeTab === 'analytics' && (
+                            <IncomeAnalytics
+                                entries={invoiceEntries}
+                                doctors={doctors}
+                                deleteInvoiceEntry={deleteInvoiceEntry}
+                                onDataChange={refreshData}
+                            />
+                        )}
+                        {activeTab === 'management' && database && (
+                            <DataManagement
+                                database={database}
+                                entries={invoiceEntries}
+                                doctors={doctors}
+                                onDataChange={refreshData}
+                            />
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
